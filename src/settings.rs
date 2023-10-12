@@ -226,6 +226,7 @@ impl GlobalSettings {
         fs::create_dir_all(dirs.config_dir())?;
 
         let config = dirs.config_dir().join("settings.toml");
+        println!("read from {config:?}");
         Ok(fs::OpenOptions::new()
             .read(true)
             .write(true)
@@ -238,7 +239,7 @@ impl Default for WindowSettings {
     fn default() -> Self {
         Self {
             resolution: (1280, 720),
-            title: "WGPU Template".into(),
+            title: "flowfield".into(),
             force_wayland: false,
             force_x11: false,
         }

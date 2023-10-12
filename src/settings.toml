@@ -13,7 +13,7 @@
 resolution = [ 1280, 720 ]
 
 # forced title for the window
-title = "WGPU Template"
+title = "flowfield"
 
 # force a specific windowing protocol (only on Unix):
 #force_wayland = true

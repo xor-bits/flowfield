@@ -99,8 +99,8 @@ impl Surface {
             (width, height)
         });
 
-        let mut alpha_mode = CompositeAlphaMode::Auto;
-        if self
+        let alpha_mode = CompositeAlphaMode::Auto;
+        /* if self
             .alpha_modes
             .contains(&CompositeAlphaMode::PostMultiplied)
         {
@@ -110,14 +110,16 @@ impl Surface {
             .contains(&CompositeAlphaMode::PreMultiplied)
         {
             alpha_mode = CompositeAlphaMode::PreMultiplied
-        };
+        }; */
 
         // tracing::debug!("surface configured to {width}x{height}");
 
         self.inner.surface.configure(
             &self.device,
             &SurfaceConfiguration {
-                usage: TextureUsages::RENDER_ATTACHMENT,
+                usage: TextureUsages::RENDER_ATTACHMENT
+                    | TextureUsages::COPY_SRC
+                    | TextureUsages::COPY_DST,
                 format: self.format,
                 width,
                 height,
