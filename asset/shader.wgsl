@@ -1,6 +1,6 @@
 //!include "./noise.wgsl"
 
-struct VertexInput {
+/* struct VertexInput {
     @builtin(vertex_index) i: u32,
     @location(0) pos: vec4<f32>,
 };
@@ -13,14 +13,17 @@ struct FragmentInput {
 
 struct DrawPush {
     mvp: mat4x4<f32>,
-};
+}; */
+
+// struct UpdatePush {
+//     time: f32,
+// };
+
+/* var<push_constant> draw_push: DrawPush;
 
 struct UpdatePush {
     time: f32,
 };
-
-var<push_constant> draw_push: DrawPush;
-
 var<push_constant> update_push: UpdatePush;
 
 const pt_size = 0.005;
@@ -60,17 +63,42 @@ fn fs_main(fin: FragmentInput) -> @location(0) vec4<f32> {
     let d = fin.pos - fin.mid;
     let t = smoothstep(0.0, -pt_size * pt_size, d.x * d.x + d.y * d.y - pt_size * pt_size);
     return vec4<f32>(1.0, 1.0, 1.0, t * 0.001);
-}
+} */
+
+struct UpdatePush {
+    time: f32,
+};
+
+var<push_constant> update_push: UpdatePush;
 
 @group(0)
 @binding(0)
+var texture: texture_storage_2d<r32float, read_write>;
+
+@group(0)
+@binding(1)
 var<storage, read_write> points: array<vec4<f32>>;
+
+// @group(0)
+// @binding(0)
+// var s_texture: texture_storage_2d<r32float, read_write>;
+
+@compute
+@workgroup_size(16, 16, 1)
+fn cs_main_shadow(@builtin(global_invocation_id) id: vec3<u32>) {
+    let coords = id.xy;
+    textureStore(texture, coords, textureLoad(texture, coords) - 0.005);
+}
 
 @compute
 @workgroup_size(512, 1, 1)
-fn cs_main(@builtin(global_invocation_id) id: vec3<u32>) {
+fn cs_main_update(@builtin(global_invocation_id) id: vec3<u32>) {
     // let i = id.x + id.y * 8u + id.z * 64u;
     let i = id.x;
+
+    if i >= arrayLength(&points) {
+        return;
+    }
 
     let now = points[i];
     var pos = now.xy;
@@ -80,7 +108,7 @@ fn cs_main(@builtin(global_invocation_id) id: vec3<u32>) {
         simplex_noise_3d(vec3<f32>(pos, time - 1000.0)),
         simplex_noise_3d(vec3<f32>(pos, time + 1000.0)),
     );
-    var vel = now.zw * 0.997 + dir * 0.00001;
+    var vel = now.zw * 0.998 + dir * 0.00001;
     // let vel = now.zw * 0.95 + dir * 0.01;
     pos += vel;
 
@@ -89,4 +117,11 @@ fn cs_main(@builtin(global_invocation_id) id: vec3<u32>) {
     pos = ((fract(pos * 0.5 + 0.5)) * 2.0 - 1.0);
 
     points[i] = vec4<f32>(pos, vel);
+
+    let coords = vec2<u32>((pos + 1.0) * 0.5 * vec2<f32>(textureDimensions(texture)));
+
+    textureStore(texture, coords, vec4<f32>(1.0));// min(textureLoad(texture, coords) + 0.5, vec4<f32>(1.0)));
+    // textureStore(texture, vec2<u32>(10u, 10u), vec4<f32>(1.0));
+
+    // textureStore(texture, coords, textureLoad(texture, coords) + 0.01);
 }

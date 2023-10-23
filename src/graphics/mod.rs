@@ -41,15 +41,20 @@ pub struct Graphics {
     #[allow(unused)]
     limits: Limits,
 
-    /* blit_sampler: Sampler,
+    target: Texture,
+
+    points: Buffer,
+    points_len: u32,
+
+    blit_sampler: Sampler,
     blit_bind_group_layout: BindGroupLayout,
-    blit_bind_group: BindGroup, */
+    blit_bind_group: BindGroup,
     blit_pipeline: RenderPipeline,
 
-    draw_vbo: Buffer,
-    draw_pipeline: RenderPipeline,
-    draw_target: Texture,
-
+    shadow_bind_group_layout: BindGroupLayout,
+    shadow_bind_group: BindGroup,
+    shadow_pipeline: ComputePipeline,
+    update_bind_group_layout: BindGroupLayout,
     update_bind_group: BindGroup,
     update_pipeline: ComputePipeline,
 }
@@ -141,15 +146,6 @@ impl Graphics {
 
         let surface = surface_builder.build(s, &gpu, device.clone());
 
-        let draw_layout = device.create_pipeline_layout(&PipelineLayoutDescriptor {
-            label: None,
-            bind_group_layouts: &[],
-            push_constant_ranges: &[PushConstantRange {
-                stages: ShaderStages::VERTEX,
-                range: 0..size_of::<DrawPush>() as u32,
-            }],
-        });
-
         let module =
             Self::load_shader_module("./asset/shader.wgsl").expect("failed to read the shader");
         let module = device.create_shader_module(ShaderModuleDescriptor {
@@ -157,7 +153,7 @@ impl Graphics {
             source: ShaderSource::Wgsl(Cow::from(module)),
         });
 
-        let draw_target = device.create_texture_with_data(
+        let target = device.create_texture_with_data(
             &queue,
             &TextureDescriptor {
                 label: None,
@@ -169,83 +165,38 @@ impl Graphics {
                 mip_level_count: 1,
                 sample_count: 1,
                 dimension: TextureDimension::D2,
-                format: surface.format(),
-                usage: TextureUsages::COPY_SRC | TextureUsages::COPY_DST,
-                view_formats: &[surface.format()],
+                format: TextureFormat::R32Float,
+                usage: TextureUsages::STORAGE_BINDING | TextureUsages::TEXTURE_BINDING,
+                view_formats: &[],
             },
             &(0..width * height * 4).map(|_| 0u8).collect::<Vec<_>>(),
         );
 
-        let draw_pipeline = device.create_render_pipeline(&RenderPipelineDescriptor {
-            label: Some("draw pipeline"),
-            layout: Some(&draw_layout),
-            vertex: VertexState {
-                module: &module,
-                entry_point: "vs_main",
-                buffers: &[
-                    /* VertexBufferLayout {
-                        array_stride: size_of::<Vertex>() as _,
-                        step_mode: VertexStepMode::Vertex,
-                        attributes: &[
-                            VertexAttribute {
-                                format: VertexFormat::Float32x4,
-                                offset: 0,
-                                shader_location: 0,
-                            },
-                            VertexAttribute {
-                                format: VertexFormat::Float32x2,
-                                offset: size_of::<Vec4>() as _,
-                                shader_location: 1,
-                            },
-                        ],
-                    }, */
-                    VertexBufferLayout {
-                        array_stride: size_of::<Instance>() as _,
-                        step_mode: VertexStepMode::Instance,
-                        attributes: &[VertexAttribute {
-                            format: VertexFormat::Float32x2,
-                            offset: 0,
-                            shader_location: 0,
-                        }],
-                    },
-                ],
-            },
-            primitive: PrimitiveState {
-                topology: PrimitiveTopology::TriangleStrip,
-                strip_index_format: None,
-                front_face: FrontFace::Ccw,
-                cull_mode: None,
-                unclipped_depth: false,
-                polygon_mode: PolygonMode::Fill,
-                conservative: false,
-            },
-            depth_stencil: None,
-            multisample: <_>::default(),
-            fragment: Some(FragmentState {
-                module: &module,
-                entry_point: "fs_main",
-                targets: &[Some(ColorTargetState {
-                    format: surface.format(),
-                    blend: Some(BlendState::ALPHA_BLENDING),
-                    write_mask: ColorWrites::ALL,
-                })],
-            }),
-            multiview: None,
-        });
-
         let update_bind_group_layout =
             device.create_bind_group_layout(&BindGroupLayoutDescriptor {
                 label: None,
-                entries: &[BindGroupLayoutEntry {
-                    binding: 0,
-                    visibility: ShaderStages::COMPUTE,
-                    ty: BindingType::Buffer {
-                        ty: BufferBindingType::Storage { read_only: false },
-                        has_dynamic_offset: false,
-                        min_binding_size: None,
+                entries: &[
+                    BindGroupLayoutEntry {
+                        binding: 0,
+                        visibility: ShaderStages::COMPUTE,
+                        ty: BindingType::StorageTexture {
+                            access: StorageTextureAccess::ReadWrite,
+                            format: TextureFormat::R32Float,
+                            view_dimension: TextureViewDimension::D2,
+                        },
+                        count: None,
                     },
-                    count: None,
-                }],
+                    BindGroupLayoutEntry {
+                        binding: 1,
+                        visibility: ShaderStages::COMPUTE,
+                        ty: BindingType::Buffer {
+                            ty: BufferBindingType::Storage { read_only: false },
+                            has_dynamic_offset: false,
+                            min_binding_size: None,
+                        },
+                        count: None,
+                    },
+                ],
             });
 
         let update_layout = device.create_pipeline_layout(&PipelineLayoutDescriptor {
@@ -261,34 +212,67 @@ impl Graphics {
             label: Some("update pipeline"),
             layout: Some(&update_layout),
             module: &module,
-            entry_point: "cs_main",
+            entry_point: "cs_main_update",
+        });
+
+        let shadow_bind_group_layout =
+            device.create_bind_group_layout(&BindGroupLayoutDescriptor {
+                label: None,
+                entries: &[BindGroupLayoutEntry {
+                    binding: 0,
+                    visibility: ShaderStages::COMPUTE,
+                    ty: BindingType::StorageTexture {
+                        access: StorageTextureAccess::ReadWrite,
+                        format: TextureFormat::R32Float,
+                        view_dimension: TextureViewDimension::D2,
+                    },
+                    count: None,
+                }],
+            });
+
+        let shadow_layout = device.create_pipeline_layout(&PipelineLayoutDescriptor {
+            label: None,
+            bind_group_layouts: &[&shadow_bind_group_layout],
+            push_constant_ranges: &[PushConstantRange {
+                stages: ShaderStages::COMPUTE,
+                range: 0..size_of::<DrawPush>() as u32,
+            }],
+        });
+
+        let shadow_pipeline = device.create_compute_pipeline(&ComputePipelineDescriptor {
+            label: Some("shadow pipeline"),
+            layout: Some(&shadow_layout),
+            module: &module,
+            entry_point: "cs_main_shadow",
         });
 
         let mut rng = rand::thread_rng();
-        let points: Vec<_> = (0..10_000)
+        // let points_len = 10_000;
+        let points_len = 1_000;
+        let points: Vec<_> = (0..points_len)
             .map(|_| Instance {
                 pos: Vec2::new(rng.gen(), rng.gen()) * 4.0 - 2.0,
                 vel: Vec2::new(rng.gen(), rng.gen()) * 0.001 - 0.0005,
             })
             .collect();
-        let draw_vbo = device.create_buffer_init(&BufferInitDescriptor {
+        let points = device.create_buffer_init(&BufferInitDescriptor {
             label: None,
             contents: bytemuck::cast_slice(&points[..]),
             usage: BufferUsages::VERTEX | BufferUsages::STORAGE,
         });
 
-        let update_bind_group = device.create_bind_group(&BindGroupDescriptor {
+        /* let update_bind_group = device.create_bind_group(&BindGroupDescriptor {
             label: None,
             layout: &update_bind_group_layout,
             entries: &[BindGroupEntry {
                 binding: 0,
                 resource: BindingResource::Buffer(BufferBinding {
-                    buffer: &draw_vbo,
+                    buffer: &points,
                     offset: 0,
                     size: None,
                 }),
             }],
-        });
+        }); */
 
         let module =
             Self::load_shader_module("./asset/blit.wgsl").expect("failed to read the shader");
@@ -321,8 +305,8 @@ impl Graphics {
 
         let blit_layout = device.create_pipeline_layout(&PipelineLayoutDescriptor {
             label: None,
-            bind_group_layouts: &[],
-            // bind_group_layouts: &[&blit_bind_group_layout],
+            // bind_group_layouts: &[],
+            bind_group_layouts: &[&blit_bind_group_layout],
             push_constant_ranges: &[PushConstantRange {
                 stages: ShaderStages::VERTEX,
                 range: 0..std::mem::size_of::<BlitPush>() as u32,
@@ -371,16 +355,20 @@ impl Graphics {
             compare: None,
             anisotropy_clamp: 1,
             border_color: Some(SamplerBorderColor::OpaqueBlack),
+
             ..<_>::default()
         });
 
-        /* let (blit_bind_group, draw_target) = Self::create_bind_groups(
+        let (blit_bind_group, shadow_bind_group, update_bind_group) = Self::create_bind_groups(
             &device,
             &limits,
             &blit_sampler,
+            &points,
             &blit_bind_group_layout,
+            &shadow_bind_group_layout,
+            &update_bind_group_layout,
             (width, height),
-        ); */
+        );
 
         Ok(Self {
             device,
@@ -392,15 +380,20 @@ impl Graphics {
 
             limits,
 
-            /* blit_sampler,
+            target,
+
+            points,
+            points_len,
+
+            blit_sampler,
             blit_bind_group_layout,
-            blit_bind_group, */
+            blit_bind_group,
             blit_pipeline,
 
-            draw_vbo,
-            draw_pipeline,
-            draw_target,
-
+            shadow_bind_group_layout,
+            shadow_bind_group,
+            shadow_pipeline,
+            update_bind_group_layout,
             update_bind_group,
             update_pipeline,
         })
@@ -410,9 +403,12 @@ impl Graphics {
         device: &Device,
         limits: &Limits,
         sampler: &Sampler,
+        points: &Buffer,
         blit_bind_layout: &BindGroupLayout,
+        shadow_bind_layout: &BindGroupLayout,
+        update_bind_layout: &BindGroupLayout,
         (mut width, mut height): (u32, u32),
-    ) -> (BindGroup, TextureView) {
+    ) -> (BindGroup, BindGroup, BindGroup) {
         width = width.min(limits.max_texture_dimension_2d);
         height = height.min(limits.max_texture_dimension_2d);
 
@@ -426,7 +422,7 @@ impl Graphics {
             mip_level_count: 1,
             sample_count: 1,
             dimension: TextureDimension::D2,
-            format: TextureFormat::Rgba8Unorm,
+            format: TextureFormat::R32Float,
             usage: TextureUsages::STORAGE_BINDING
                 | TextureUsages::TEXTURE_BINDING
                 | TextureUsages::RENDER_ATTACHMENT,
@@ -436,7 +432,7 @@ impl Graphics {
         let target_view = target.create_view(&TextureViewDescriptor { ..<_>::default() });
 
         let blit_bind_group = device.create_bind_group(&BindGroupDescriptor {
-            label: None,
+            label: Some("blit bind group"),
             layout: blit_bind_layout,
             entries: &[
                 BindGroupEntry {
@@ -450,13 +446,35 @@ impl Graphics {
             ],
         });
 
-        /* let draw_bind_group = device.create_bind_group(&BindGroupDescriptor {
-            label: None,
-            layout: draw_bind_layout,
-            entries: &[],
-        }); */
+        let shadow_bind_group = device.create_bind_group(&BindGroupDescriptor {
+            label: Some("shadow bind group"),
+            layout: shadow_bind_layout,
+            entries: &[BindGroupEntry {
+                binding: 0,
+                resource: BindingResource::TextureView(&target_view),
+            }],
+        });
 
-        (blit_bind_group, target_view)
+        let update_bind_group = device.create_bind_group(&BindGroupDescriptor {
+            label: Some("update bind group"),
+            layout: update_bind_layout,
+            entries: &[
+                BindGroupEntry {
+                    binding: 0,
+                    resource: BindingResource::TextureView(&target_view),
+                },
+                BindGroupEntry {
+                    binding: 1,
+                    resource: BindingResource::Buffer(BufferBinding {
+                        buffer: points,
+                        offset: 0,
+                        size: None,
+                    }),
+                },
+            ],
+        });
+
+        (blit_bind_group, shadow_bind_group, update_bind_group)
         // (blit_bind_group, draw_bind_group)
     }
 
@@ -506,16 +524,23 @@ impl Graphics {
     pub fn resized(&mut self, size: (u32, u32)) {
         self.surface.configure(Some(size));
 
-        /* (self.blit_bind_group, self.draw_target) = Self::create_bind_groups(
+        (
+            self.blit_bind_group,
+            self.shadow_bind_group,
+            self.update_bind_group,
+        ) = Self::create_bind_groups(
             &self.device,
             &self.limits,
             &self.blit_sampler,
+            &self.points,
             &self.blit_bind_group_layout,
+            &self.shadow_bind_group_layout,
+            &self.update_bind_group_layout,
             size,
-        ); */
+        );
 
         let (width, height) = size;
-        self.draw_target = self.device.create_texture_with_data(
+        /* self.draw_target = self.device.create_texture_with_data(
             &self.queue,
             &TextureDescriptor {
                 label: None,
@@ -532,7 +557,7 @@ impl Graphics {
                 view_formats: &[self.surface.format()],
             },
             &(0..width * height * 4).map(|_| 0u8).collect::<Vec<_>>(),
-        );
+        ); */
     }
 
     pub fn frame(&mut self, _settings: &RuntimeSettings) {
@@ -549,126 +574,6 @@ impl Graphics {
             .device
             .create_command_encoder(&CommandEncoderDescriptor { ..<_>::default() });
 
-        encoder.copy_texture_to_texture(
-            ImageCopyTexture {
-                texture: &self.draw_target,
-                mip_level: 0,
-                origin: Origin3d { x: 0, y: 0, z: 0 },
-                aspect: TextureAspect::All,
-            },
-            ImageCopyTexture {
-                texture: &texture.texture,
-                mip_level: 0,
-                origin: Origin3d { x: 0, y: 0, z: 0 },
-                aspect: TextureAspect::All,
-            },
-            Extent3d {
-                width: texture.texture.width().min(self.draw_target.width()),
-                height: texture.texture.height().min(self.draw_target.height()),
-                depth_or_array_layers: 1,
-            },
-        );
-
-        let mut pass = encoder.begin_render_pass(&RenderPassDescriptor {
-            label: Some("draw pass"),
-            color_attachments: &[Some(RenderPassColorAttachment {
-                view: &texture_view,
-                resolve_target: None,
-                ops: Operations {
-                    load: LoadOp::Load, // no clear
-                    store: true,
-                },
-                /* ops: Operations {
-                    load: LoadOp::Clear(Color {
-                        r: 0.0,
-                        g: 0.0,
-                        b: 0.0,
-                        a: 0.0,
-                    }),
-                    store: true,
-                }, */
-            })],
-            ..<_>::default()
-        });
-
-        pass.set_pipeline(&self.blit_pipeline);
-        pass.set_push_constants(
-            ShaderStages::VERTEX,
-            0,
-            bytemuck::cast_slice(std::slice::from_ref(&BlitPush { flags: 0 })),
-        );
-        pass.draw(0..4, 0..1);
-
-        pass.set_pipeline(&self.draw_pipeline);
-
-        let size = self.surface.window.inner_size().cast::<f32>();
-        let aspect = size.width / size.height;
-        let push = DrawPush {
-            mvp: Mat4::orthographic_rh(-aspect, aspect, 1.0, -1.0, -1.0, 1.0), // * Mat4::from_rotation_z(self.boot.elapsed().as_secs_f32()),
-        };
-
-        pass.set_push_constants(
-            ShaderStages::VERTEX,
-            0,
-            bytemuck::cast_slice(std::slice::from_ref(&push)),
-        );
-        pass.set_vertex_buffer(0, self.draw_vbo.slice(..));
-
-        let count = self.draw_vbo.size() as u32 / std::mem::size_of::<Instance>() as u32;
-        pass.draw(0..3, 0..count);
-
-        drop(pass);
-
-        /* let mut pass = encoder.begin_render_pass(&RenderPassDescriptor {
-            label: Some("blit pass"),
-            color_attachments: &[Some(RenderPassColorAttachment {
-                view: &texture_view,
-                resolve_target: None,
-                ops: Operations {
-                    load: LoadOp::Load, // no clear
-                    store: true,
-                },
-                /* ops: Operations {
-                    load: LoadOp::Clear(Color {
-                        r: 0.0,
-                        g: 0.0,
-                        b: 0.0,
-                        a: 1.0,
-                    }),
-                    store: true,
-                }, */
-            })],
-            ..<_>::default()
-        });
-
-        pass.set_pipeline(&self.blit_pipeline);
-
-        pass.set_bind_group(0, &self.blit_bind_group, &[]);
-
-        pass.draw(0..4, 0..2);
-
-        drop(pass); */
-
-        encoder.copy_texture_to_texture(
-            ImageCopyTexture {
-                texture: &texture.texture,
-                mip_level: 0,
-                origin: Origin3d { x: 0, y: 0, z: 0 },
-                aspect: TextureAspect::All,
-            },
-            ImageCopyTexture {
-                texture: &self.draw_target,
-                mip_level: 0,
-                origin: Origin3d { x: 0, y: 0, z: 0 },
-                aspect: TextureAspect::All,
-            },
-            Extent3d {
-                width: texture.texture.width().min(self.draw_target.width()),
-                height: texture.texture.height().min(self.draw_target.height()),
-                depth_or_array_layers: 1,
-            },
-        );
-
         let mut pass = encoder.begin_compute_pass(&ComputePassDescriptor {
             label: Some("update pass"),
         });
@@ -681,8 +586,53 @@ impl Graphics {
 
         pass.set_push_constants(0, bytemuck::cast_slice(std::slice::from_ref(&push)));
         pass.set_bind_group(0, &self.update_bind_group, &[]);
+        pass.dispatch_workgroups(self.points_len / 512 + 1, 1, 1);
 
-        pass.dispatch_workgroups(count / 512 + 1, 1, 1);
+        drop(pass);
+
+        let mut pass = encoder.begin_compute_pass(&ComputePassDescriptor {
+            label: Some("shadow pass"),
+        });
+
+        pass.set_pipeline(&self.shadow_pipeline);
+
+        pass.set_bind_group(0, &self.shadow_bind_group, &[]);
+        let w = self.target.width() / 16 + 1;
+        let h = self.target.height() / 16 + 1;
+        pass.dispatch_workgroups(w, h, 1);
+
+        drop(pass);
+
+        let mut pass = encoder.begin_render_pass(&RenderPassDescriptor {
+            label: Some("blit pass"),
+            color_attachments: &[Some(RenderPassColorAttachment {
+                view: &texture_view,
+                resolve_target: None,
+                /* ops: Operations {
+                    load: LoadOp::Load, // no clear
+                    store: true,
+                }, */
+                ops: Operations {
+                    load: LoadOp::Clear(Color {
+                        r: 0.0,
+                        g: 0.0,
+                        b: 0.0,
+                        a: 0.0,
+                    }),
+                    store: true,
+                },
+            })],
+            ..<_>::default()
+        });
+
+        pass.set_pipeline(&self.blit_pipeline);
+        pass.set_push_constants(
+            ShaderStages::VERTEX,
+            0,
+            bytemuck::cast_slice(std::slice::from_ref(&BlitPush { flags: 0 })),
+        );
+        pass.set_bind_group(0, &self.blit_bind_group, &[]);
+        pass.draw(0..4, 0..1);
 
         drop(pass);
 

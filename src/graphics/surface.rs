@@ -117,9 +117,7 @@ impl Surface {
         self.inner.surface.configure(
             &self.device,
             &SurfaceConfiguration {
-                usage: TextureUsages::RENDER_ATTACHMENT
-                    | TextureUsages::COPY_SRC
-                    | TextureUsages::COPY_DST,
+                usage: TextureUsages::RENDER_ATTACHMENT,
                 format: self.format,
                 width,
                 height,
