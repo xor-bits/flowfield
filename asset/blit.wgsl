@@ -34,7 +34,20 @@ fn vs_main(vin: VertexInput) -> FragmentInput {
 @fragment
 fn fs_main(fin: FragmentInput) -> @location(0) vec4<f32> {
     if push.flags == 0u {
+        /* let o = 1.0 / vec2<f32>(textureDimensions(texture_t));
+        let c = textureSample(texture_t, texture_s, fin.uv + vec2f(0.0, 0.0)).r * 0.11111111
+            + textureSample(texture_t, texture_s, fin.uv + vec2f(o.x, o.y)).r * 0.11111111
+            + textureSample(texture_t, texture_s, fin.uv + vec2f(0.0, o.y)).r * 0.11111111
+            + textureSample(texture_t, texture_s, fin.uv + vec2f(-o.x, o.y)).r * 0.11111111
+            + textureSample(texture_t, texture_s, fin.uv + vec2f(o.x,  0.0)).r * 0.11111111
+            + textureSample(texture_t, texture_s, fin.uv + vec2f(0.0,  0.0)).r * 0.11111111
+            + textureSample(texture_t, texture_s, fin.uv + vec2f(-o.x, 0.0)).r * 0.11111111
+            + textureSample(texture_t, texture_s, fin.uv + vec2f(o.x, -o.y)).r * 0.11111111
+            + textureSample(texture_t, texture_s, fin.uv + vec2f(0.0, -o.y)).r * 0.11111111
+            + textureSample(texture_t, texture_s, fin.uv + vec2f(-o.x,-o.y)).r * 0.11111111; */
+
         let c = textureSample(texture_t, texture_s, fin.uv).r;
+
         return vec4<f32>(c, c, c, 1.0);
     } else {
         return vec4<f32>(fin.uv, 0.0, 1.0);

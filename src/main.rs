@@ -18,7 +18,7 @@ pub mod settings;
 //
 
 pub struct RuntimeSettings {
-    pub enable_uv: bool,
+    pub f: u32,
 }
 
 //
@@ -72,7 +72,7 @@ async fn main() {
         .await
         .unwrap();
 
-    let mut settings = RuntimeSettings { enable_uv: false };
+    let mut settings = RuntimeSettings { f: 0 };
 
     window.set_visible(true);
 
@@ -97,9 +97,19 @@ async fn main() {
                     },
                 ..
             } => match key {
-                VirtualKeyCode::F1 => {
-                    settings.enable_uv = !settings.enable_uv;
-                }
+                VirtualKeyCode::F1 => settings.f ^= 1,
+                VirtualKeyCode::F2 => settings.f ^= 1 << 1,
+                VirtualKeyCode::F3 => settings.f ^= 1 << 2,
+                VirtualKeyCode::F4 => settings.f ^= 1 << 3,
+                VirtualKeyCode::F5 => settings.f ^= 1 << 4,
+                VirtualKeyCode::F6 => settings.f ^= 1 << 5,
+                VirtualKeyCode::F7 => settings.f ^= 1 << 6,
+                VirtualKeyCode::F8 => settings.f ^= 1 << 7,
+                VirtualKeyCode::F9 => settings.f ^= 1 << 8,
+                VirtualKeyCode::F10 => settings.f ^= 1 << 9,
+                VirtualKeyCode::F11 => settings.f ^= 1 << 10,
+                VirtualKeyCode::F12 => settings.f ^= 1 << 11,
+
                 VirtualKeyCode::Escape => {
                     control.set_exit();
                 }

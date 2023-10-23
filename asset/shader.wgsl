@@ -67,9 +67,17 @@ fn fs_main(fin: FragmentInput) -> @location(0) vec4<f32> {
 
 struct UpdatePush {
     time: f32,
+    flags: u32,
 };
 
 var<push_constant> update_push: UpdatePush;
+
+struct ShadowPush {
+    time: f32,
+    flags: u32,
+};
+
+var<push_constant> shadow_push: ShadowPush;
 
 @group(0)
 @binding(0)
@@ -86,8 +94,13 @@ var<storage, read_write> points: array<vec4<f32>>;
 @compute
 @workgroup_size(16, 16, 1)
 fn cs_main_shadow(@builtin(global_invocation_id) id: vec3<u32>) {
+    var shadow = 0.00015;
+    if (shadow_push.flags & 1u) == 1u {
+        shadow = 0.005;
+    }
+
     let coords = id.xy;
-    textureStore(texture, coords, textureLoad(texture, coords) - 0.005);
+    textureStore(texture, coords, textureLoad(texture, coords) - shadow);
 }
 
 @compute
@@ -102,13 +115,13 @@ fn cs_main_update(@builtin(global_invocation_id) id: vec3<u32>) {
 
     let now = points[i];
     var pos = now.xy;
-    let time = 0.01 * update_push.time;
+    let time = 0.005 * update_push.time;
     // let time = 10.0 * update_push.time;
     let dir = vec2<f32>(
         simplex_noise_3d(vec3<f32>(pos, time - 1000.0)),
         simplex_noise_3d(vec3<f32>(pos, time + 1000.0)),
     );
-    var vel = now.zw * 0.998 + dir * 0.00001;
+    var vel = now.zw * 0.999 + dir * 0.00001;
     // let vel = now.zw * 0.95 + dir * 0.01;
     pos += vel;
 
@@ -120,8 +133,13 @@ fn cs_main_update(@builtin(global_invocation_id) id: vec3<u32>) {
 
     let coords = vec2<u32>((pos + 1.0) * 0.5 * vec2<f32>(textureDimensions(texture)));
 
-    textureStore(texture, coords, vec4<f32>(1.0));// min(textureLoad(texture, coords) + 0.5, vec4<f32>(1.0)));
+    var point = 0.008;
+    if (update_push.flags & 1u) == 1u {
+        point = 1.0;
+    }
+
+    // textureStore(texture, coords, vec4<f32>(1.0));// min(textureLoad(texture, coords) + 0.5, vec4<f32>(1.0)));
     // textureStore(texture, vec2<u32>(10u, 10u), vec4<f32>(1.0));
 
-    // textureStore(texture, coords, textureLoad(texture, coords) + 0.01);
+    textureStore(texture, coords, min(textureLoad(texture, coords) + point, vec4<f32>(1.0)));
 }

@@ -41,7 +41,8 @@ pub struct Graphics {
     #[allow(unused)]
     limits: Limits,
 
-    target: Texture,
+    last_flags: u32,
+    size: (u32, u32),
 
     points: Buffer,
     points_len: u32,
@@ -69,6 +70,13 @@ struct DrawPush {
 #[repr(C)]
 struct UpdatePush {
     time: f32,
+    flags: u32,
+}
+
+#[derive(Clone, Copy, Pod, Zeroable)]
+#[repr(C)]
+struct ShadowPush {
+    flags: u32,
 }
 
 #[derive(Clone, Copy, Pod, Zeroable)]
@@ -153,25 +161,6 @@ impl Graphics {
             source: ShaderSource::Wgsl(Cow::from(module)),
         });
 
-        let target = device.create_texture_with_data(
-            &queue,
-            &TextureDescriptor {
-                label: None,
-                size: Extent3d {
-                    width,
-                    height,
-                    depth_or_array_layers: 1,
-                },
-                mip_level_count: 1,
-                sample_count: 1,
-                dimension: TextureDimension::D2,
-                format: TextureFormat::R32Float,
-                usage: TextureUsages::STORAGE_BINDING | TextureUsages::TEXTURE_BINDING,
-                view_formats: &[],
-            },
-            &(0..width * height * 4).map(|_| 0u8).collect::<Vec<_>>(),
-        );
-
         let update_bind_group_layout =
             device.create_bind_group_layout(&BindGroupLayoutDescriptor {
                 label: None,
@@ -204,7 +193,7 @@ impl Graphics {
             bind_group_layouts: &[&update_bind_group_layout],
             push_constant_ranges: &[PushConstantRange {
                 stages: ShaderStages::COMPUTE,
-                range: 0..size_of::<DrawPush>() as u32,
+                range: 0..size_of::<UpdatePush>() as u32,
             }],
         });
 
@@ -235,7 +224,7 @@ impl Graphics {
             bind_group_layouts: &[&shadow_bind_group_layout],
             push_constant_ranges: &[PushConstantRange {
                 stages: ShaderStages::COMPUTE,
-                range: 0..size_of::<DrawPush>() as u32,
+                range: 0..size_of::<ShadowPush>() as u32,
             }],
         });
 
@@ -247,8 +236,7 @@ impl Graphics {
         });
 
         let mut rng = rand::thread_rng();
-        // let points_len = 10_000;
-        let points_len = 1_000;
+        let points_len = 100_000;
         let points: Vec<_> = (0..points_len)
             .map(|_| Instance {
                 pos: Vec2::new(rng.gen(), rng.gen()) * 4.0 - 2.0,
@@ -288,7 +276,7 @@ impl Graphics {
                     binding: 0,
                     visibility: ShaderStages::FRAGMENT,
                     ty: BindingType::Texture {
-                        sample_type: TextureSampleType::Float { filterable: false },
+                        sample_type: TextureSampleType::Float { filterable: true },
                         view_dimension: TextureViewDimension::D2,
                         multisampled: false,
                     },
@@ -297,7 +285,7 @@ impl Graphics {
                 BindGroupLayoutEntry {
                     binding: 1,
                     visibility: ShaderStages::FRAGMENT,
-                    ty: BindingType::Sampler(SamplerBindingType::NonFiltering),
+                    ty: BindingType::Sampler(SamplerBindingType::Filtering),
                     count: None,
                 },
             ],
@@ -352,6 +340,9 @@ impl Graphics {
             mag_filter: FilterMode::Nearest,
             min_filter: FilterMode::Nearest,
             mipmap_filter: FilterMode::Nearest,
+            // mag_filter: FilterMode::Linear,
+            // min_filter: FilterMode::Linear,
+            // mipmap_filter: FilterMode::Linear,
             compare: None,
             anisotropy_clamp: 1,
             border_color: Some(SamplerBorderColor::OpaqueBlack),
@@ -380,7 +371,8 @@ impl Graphics {
 
             limits,
 
-            target,
+            last_flags: 0,
+            size: (width, height),
 
             points,
             points_len,
@@ -409,6 +401,8 @@ impl Graphics {
         update_bind_layout: &BindGroupLayout,
         (mut width, mut height): (u32, u32),
     ) -> (BindGroup, BindGroup, BindGroup) {
+        // width /= 2;
+        // height /= 2;
         width = width.min(limits.max_texture_dimension_2d);
         height = height.min(limits.max_texture_dimension_2d);
 
@@ -538,6 +532,7 @@ impl Graphics {
             &self.update_bind_group_layout,
             size,
         );
+        self.size = size;
 
         let (width, height) = size;
         /* self.draw_target = self.device.create_texture_with_data(
@@ -560,7 +555,13 @@ impl Graphics {
         ); */
     }
 
-    pub fn frame(&mut self, _settings: &RuntimeSettings) {
+    pub fn frame(&mut self, settings: &RuntimeSettings) {
+        if self.last_flags != settings.f {
+            self.last_flags = settings.f;
+
+            self.resized(self.size);
+        }
+
         let texture = self
             .surface
             .acquire()
@@ -582,6 +583,7 @@ impl Graphics {
 
         let push = UpdatePush {
             time: self.boot.elapsed().as_secs_f32(),
+            flags: settings.f,
         };
 
         pass.set_push_constants(0, bytemuck::cast_slice(std::slice::from_ref(&push)));
@@ -596,10 +598,11 @@ impl Graphics {
 
         pass.set_pipeline(&self.shadow_pipeline);
 
+        let push = ShadowPush { flags: settings.f };
+
+        pass.set_push_constants(0, bytemuck::cast_slice(std::slice::from_ref(&push)));
         pass.set_bind_group(0, &self.shadow_bind_group, &[]);
-        let w = self.target.width() / 16 + 1;
-        let h = self.target.height() / 16 + 1;
-        pass.dispatch_workgroups(w, h, 1);
+        pass.dispatch_workgroups(self.size.0 / 16 + 1, self.size.1 / 16 + 1, 1);
 
         drop(pass);
 
