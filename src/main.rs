@@ -17,6 +17,7 @@ pub mod settings;
 
 //
 
+#[derive(Debug)]
 pub struct RuntimeSettings {
     pub f: u32,
 }

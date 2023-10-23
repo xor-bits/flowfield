@@ -94,13 +94,22 @@ var<storage, read_write> points: array<vec4<f32>>;
 @compute
 @workgroup_size(16, 16, 1)
 fn cs_main_shadow(@builtin(global_invocation_id) id: vec3<u32>) {
-    var shadow = 0.00015;
+    var shadow_sub = 0.00015;
+    var shadow_mul = 0.99;
     if (shadow_push.flags & 1u) == 1u {
-        shadow = 0.005;
+        shadow_sub = 0.005;
+        shadow_mul = 0.98;
     }
 
     let coords = id.xy;
-    textureStore(texture, coords, textureLoad(texture, coords) - shadow);
+    var pix = textureLoad(texture, coords);
+    if (shadow_push.flags & 2u) == 2u {
+        pix -= shadow_sub;
+    } else {
+        pix *= shadow_mul;
+    }
+
+    textureStore(texture, coords, pix);
 }
 
 @compute
@@ -121,7 +130,7 @@ fn cs_main_update(@builtin(global_invocation_id) id: vec3<u32>) {
         simplex_noise_3d(vec3<f32>(pos, time - 1000.0)),
         simplex_noise_3d(vec3<f32>(pos, time + 1000.0)),
     );
-    var vel = now.zw * 0.999 + dir * 0.00001;
+    var vel = now.zw * 0.9985 + dir * 0.00001;
     // let vel = now.zw * 0.95 + dir * 0.01;
     pos += vel;
 
@@ -134,7 +143,7 @@ fn cs_main_update(@builtin(global_invocation_id) id: vec3<u32>) {
     let coords = vec2<u32>((pos + 1.0) * 0.5 * vec2<f32>(textureDimensions(texture)));
 
     var point = 0.008;
-    if (update_push.flags & 1u) == 1u {
+    if (update_push.flags & 4u) == 4u {
         point = 1.0;
     }
 

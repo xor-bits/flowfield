@@ -561,6 +561,7 @@ impl Graphics {
 
             self.resized(self.size);
         }
+        println!("flags: {:b}", settings.f);
 
         let texture = self
             .surface
