@@ -1,5 +1,6 @@
 use std::{env, sync::Arc};
 
+use glam::Vec2;
 use winit::{
     dpi::LogicalSize,
     event::{ElementState, Event, KeyboardInput, MouseScrollDelta, VirtualKeyCode, WindowEvent},
@@ -131,6 +132,12 @@ async fn main() {
                 ..
             } => {
                 graphics.resized((s.width, s.height));
+            }
+            Event::WindowEvent {
+                event: WindowEvent::CursorMoved { position, .. },
+                ..
+            } => {
+                graphics.cursor = Vec2::new(position.x as f32, position.y as f32);
             }
             Event::MainEventsCleared => graphics.frame(&settings),
             _ => {}

@@ -44,6 +44,8 @@ pub struct Graphics {
     last_flags: u32,
     size: (u32, u32),
 
+    pub cursor: Vec2,
+
     points: Buffer,
     points_len: u32,
 
@@ -69,6 +71,7 @@ struct DrawPush {
 #[derive(Clone, Copy, Pod, Zeroable)]
 #[repr(C)]
 struct UpdatePush {
+    cursor: Vec2,
     time: f32,
     flags: u32,
 }
@@ -374,6 +377,8 @@ impl Graphics {
             last_flags: 0,
             size: (width, height),
 
+            cursor: Vec2::new(-100.0, -100.0),
+
             points,
             points_len,
 
@@ -583,6 +588,7 @@ impl Graphics {
         pass.set_pipeline(&self.update_pipeline);
 
         let push = UpdatePush {
+            cursor: self.cursor,
             time: self.boot.elapsed().as_secs_f32(),
             flags: settings.f,
         };

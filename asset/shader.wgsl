@@ -66,6 +66,7 @@ fn fs_main(fin: FragmentInput) -> @location(0) vec4<f32> {
 } */
 
 struct UpdatePush {
+    cursor: vec2<f32>,
     time: f32,
     flags: u32,
 };
@@ -126,11 +127,16 @@ fn cs_main_update(@builtin(global_invocation_id) id: vec3<u32>) {
     var pos = now.xy;
     let time = 0.005 * update_push.time;
     // let time = 10.0 * update_push.time;
-    let dir = vec2<f32>(
+    /* let dir = vec2<f32>(
         simplex_noise_3d(vec3<f32>(pos, time - 1000.0)),
         simplex_noise_3d(vec3<f32>(pos, time + 1000.0)),
-    );
-    var vel = now.zw * 0.9985 + dir * 0.00001;
+    ); */
+
+    let cursor_flipped = update_push.cursor / vec2<f32>(textureDimensions(texture)) * 2.0 - 1.0;
+    let cursor = vec2<f32>(cursor_flipped.x, -cursor_flipped.y);
+    let dir = cursor - pos;
+    // var vel = now.zw * 0.9985 + dir * 0.00001;
+    let vel = normalize(dir) / length(dir) * 0.001;
     // let vel = now.zw * 0.95 + dir * 0.01;
     pos += vel;
 
