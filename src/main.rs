@@ -98,25 +98,38 @@ async fn main() {
                         ..
                     },
                 ..
-            } => match key {
-                VirtualKeyCode::F1 => settings.f ^= 1,
-                VirtualKeyCode::F2 => settings.f ^= 1 << 1,
-                VirtualKeyCode::F3 => settings.f ^= 1 << 2,
-                VirtualKeyCode::F4 => settings.f ^= 1 << 3,
-                VirtualKeyCode::F5 => settings.f ^= 1 << 4,
-                VirtualKeyCode::F6 => settings.f ^= 1 << 5,
-                VirtualKeyCode::F7 => settings.f ^= 1 << 6,
-                VirtualKeyCode::F8 => settings.f ^= 1 << 7,
-                VirtualKeyCode::F9 => settings.f ^= 1 << 8,
-                VirtualKeyCode::F10 => settings.f ^= 1 << 9,
-                VirtualKeyCode::F11 => settings.f ^= 1 << 10,
-                VirtualKeyCode::F12 => settings.f ^= 1 << 11,
+            } => {
+                match key {
+                    VirtualKeyCode::F1 => settings.f ^= 1,
+                    VirtualKeyCode::F2 => settings.f ^= 1 << 1,
+                    VirtualKeyCode::F3 => settings.f ^= 1 << 2,
+                    VirtualKeyCode::F4 => settings.f ^= 1 << 3,
+                    VirtualKeyCode::F5 => settings.f ^= 1 << 4,
+                    VirtualKeyCode::F6 => settings.f ^= 1 << 5,
+                    VirtualKeyCode::F7 => settings.f ^= 1 << 6,
+                    VirtualKeyCode::F8 => settings.f ^= 1 << 7,
+                    VirtualKeyCode::F9 => settings.f ^= 1 << 8,
+                    VirtualKeyCode::F10 => settings.f ^= 1 << 9,
+                    VirtualKeyCode::F11 => settings.f ^= 1 << 10,
+                    VirtualKeyCode::F12 => settings.f ^= 1 << 11,
 
-                VirtualKeyCode::Escape => {
-                    control.set_exit();
-                }
-                _ => {}
-            },
+                    VirtualKeyCode::Escape => {
+                        control.set_exit();
+                    }
+                    _ => {}
+                };
+
+                println!();
+                println!("Keys:");
+                println!("F1 = long exposure ({})", settings.f & (1) == 0);
+                println!("F2 = sub mode ({})", settings.f & (1 << 1) != 0);
+                println!("F3 = heavy points ({})", settings.f & (1 << 2) != 0);
+                println!("F4 = cursor main toggle ({})", settings.f & (1 << 3) == 0);
+                println!("F5 = heavy cursor ({})", settings.f & (1 << 4) != 0);
+                println!("F6 = noise main toggle ({})", settings.f & (1 << 5) != 0);
+                println!("F7 = heavy noise ({})", settings.f & (1 << 6) != 0);
+                println!("F8 = freeze noise ({})", settings.f & (1 << 7) != 0);
+            }
             Event::WindowEvent {
                 event:
                     WindowEvent::MouseWheel {

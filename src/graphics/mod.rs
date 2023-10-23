@@ -561,12 +561,15 @@ impl Graphics {
     }
 
     pub fn frame(&mut self, settings: &RuntimeSettings) {
-        if self.last_flags != settings.f {
+        /* if self.last_flags != settings.f {
             self.last_flags = settings.f;
 
             self.resized(self.size);
+        } */
+        if settings.f & 1 << 11 != 0 {
+            // self.resized(self.size);
         }
-        println!("flags: {:b}", settings.f);
+        // println!("flags: {:b}", settings.f);
 
         let texture = self
             .surface
@@ -580,6 +583,20 @@ impl Graphics {
         let mut encoder = self
             .device
             .create_command_encoder(&CommandEncoderDescriptor { ..<_>::default() });
+
+        let mut pass = encoder.begin_compute_pass(&ComputePassDescriptor {
+            label: Some("shadow pass"),
+        });
+
+        pass.set_pipeline(&self.shadow_pipeline);
+
+        let push = ShadowPush { flags: settings.f };
+
+        pass.set_push_constants(0, bytemuck::cast_slice(std::slice::from_ref(&push)));
+        pass.set_bind_group(0, &self.shadow_bind_group, &[]);
+        pass.dispatch_workgroups(self.size.0 / 16 + 1, self.size.1 / 16 + 1, 1);
+
+        drop(pass);
 
         let mut pass = encoder.begin_compute_pass(&ComputePassDescriptor {
             label: Some("update pass"),
@@ -596,20 +613,6 @@ impl Graphics {
         pass.set_push_constants(0, bytemuck::cast_slice(std::slice::from_ref(&push)));
         pass.set_bind_group(0, &self.update_bind_group, &[]);
         pass.dispatch_workgroups(self.points_len / 512 + 1, 1, 1);
-
-        drop(pass);
-
-        let mut pass = encoder.begin_compute_pass(&ComputePassDescriptor {
-            label: Some("shadow pass"),
-        });
-
-        pass.set_pipeline(&self.shadow_pipeline);
-
-        let push = ShadowPush { flags: settings.f };
-
-        pass.set_push_constants(0, bytemuck::cast_slice(std::slice::from_ref(&push)));
-        pass.set_bind_group(0, &self.shadow_bind_group, &[]);
-        pass.dispatch_workgroups(self.size.0 / 16 + 1, self.size.1 / 16 + 1, 1);
 
         drop(pass);
 

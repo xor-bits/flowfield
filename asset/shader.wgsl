@@ -74,7 +74,6 @@ struct UpdatePush {
 var<push_constant> update_push: UpdatePush;
 
 struct ShadowPush {
-    time: f32,
     flags: u32,
 };
 
@@ -96,18 +95,22 @@ var<storage, read_write> points: array<vec4<f32>>;
 @workgroup_size(16, 16, 1)
 fn cs_main_shadow(@builtin(global_invocation_id) id: vec3<u32>) {
     var shadow_sub = 0.00015;
-    var shadow_mul = 0.99;
-    if (shadow_push.flags & 1u) == 1u {
+    var shadow_mul = 0.999;
+    if (shadow_push.flags & 1u) != 0u {
         shadow_sub = 0.005;
         shadow_mul = 0.98;
     }
 
     let coords = id.xy;
     var pix = textureLoad(texture, coords);
-    if (shadow_push.flags & 2u) == 2u {
+    if (shadow_push.flags & 2u) != 0u {
         pix -= shadow_sub;
     } else {
         pix *= shadow_mul;
+    }
+
+    if (shadow_push.flags & 2048u) != 0u {
+        pix = vec4<f32>(0.0);
     }
 
     textureStore(texture, coords, pix);
@@ -125,32 +128,54 @@ fn cs_main_update(@builtin(global_invocation_id) id: vec3<u32>) {
 
     let now = points[i];
     var pos = now.xy;
-    let time = 0.005 * update_push.time;
+
+    var speed = 0.005;
+    if (update_push.flags & 128u) != 0u {
+        speed = 0.0;
+    }
+    let time = speed * update_push.time;
     // let time = 10.0 * update_push.time;
-    /* let dir = vec2<f32>(
+    var vel = now.zw * 0.998; // 0.9985
+    let noise_dir = vec2<f32>(
         simplex_noise_3d(vec3<f32>(pos, time - 1000.0)),
         simplex_noise_3d(vec3<f32>(pos, time + 1000.0)),
-    ); */
+    );
+    var noise_strength = 0.00001;
+    if (update_push.flags & 32u) != 0u {
+        noise_strength *= 0.0;
+    }
+    if (update_push.flags & 64u) != 0u {
+        noise_strength *= 10.0;
+    }
+    vel += noise_dir * noise_strength;
 
     let cursor_flipped = update_push.cursor / vec2<f32>(textureDimensions(texture)) * 2.0 - 1.0;
     let cursor = vec2<f32>(cursor_flipped.x, -cursor_flipped.y);
-    let dir = cursor - pos;
-    // var vel = now.zw * 0.9985 + dir * 0.00001;
-    let vel = normalize(dir) / length(dir) * 0.001;
-    // let vel = now.zw * 0.95 + dir * 0.01;
+    let cursor_dir = cursor - pos;
+
+    let angle = atan2(cursor_dir.y, cursor_dir.x);
+    let dist_sqr = (cursor_dir.x * cursor_dir.x + cursor_dir.y * cursor_dir.y);
+    // let vel = normalize(dir) / length(dir) * 0.001;
+    var cursor_strength = 0.000001;
+    if (update_push.flags & 8u) != 0u {
+        cursor_strength *= 0.0;
+    }
+    if (update_push.flags & 16u) != 0u {
+        cursor_strength *= 10.0;
+    }
+    vel += vec2<f32>(sin(angle), -cos(angle)) / dist_sqr * cursor_strength * 0.01;
+
     pos += vel;
 
-    // pos.x = ((fract(pos.x * 0.5 + 0.5)) * 2.0 - 1.0);
-    // pos.y = ((fract(pos.x * 0.5 + 0.5)) * 2.0 - 1.0);
     pos = ((fract(pos * 0.5 + 0.5)) * 2.0 - 1.0);
 
     points[i] = vec4<f32>(pos, vel);
 
     let coords = vec2<u32>((pos + 1.0) * 0.5 * vec2<f32>(textureDimensions(texture)));
 
-    var point = 0.008;
-    if (update_push.flags & 4u) == 4u {
-        point = 1.0;
+    var point = 0.002;
+    if (update_push.flags & 4u) != 0u {
+        point = 0.02;
     }
 
     // textureStore(texture, coords, vec4<f32>(1.0));// min(textureLoad(texture, coords) + 0.5, vec4<f32>(1.0)));
