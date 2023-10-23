@@ -48,7 +48,7 @@ fn fs_main(fin: FragmentInput) -> @location(0) vec4<f32> {
 
         let c = textureSample(texture_t, texture_s, fin.uv).r;
 
-        return vec4<f32>(c, c, c, 1.0);
+        return vec4<f32>(0.0, fin.uv.x * fin.uv.y, fin.uv.y, c);
     } else {
         return vec4<f32>(fin.uv, 0.0, 1.0);
     }
