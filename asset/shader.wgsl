@@ -136,10 +136,12 @@ fn cs_main_update(@builtin(global_invocation_id) id: vec3<u32>) {
     let time = speed * update_push.time;
     // let time = 10.0 * update_push.time;
     var vel = now.zw * 0.998; // 0.9985
-    let noise_dir = vec2<f32>(
+    /* let noise_dir = vec2<f32>(
         simplex_noise_3d(vec3<f32>(pos, time - 1000.0)),
         simplex_noise_3d(vec3<f32>(pos, time + 1000.0)),
-    );
+    ); */
+    let noise_dir_a = simplex_noise_3d(vec3<f32>(pos, time)) * 3.14159265358979323846;
+    let noise_dir = vec2<f32>(cos(noise_dir_a), sin(noise_dir_a)) * 0.2;
     var noise_strength = 0.00001;
     if (update_push.flags & 32u) != 0u {
         noise_strength *= 0.0;
