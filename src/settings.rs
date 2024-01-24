@@ -279,7 +279,6 @@ impl GraphicsBackends {
         backends.set(Backends::GL, self.gl);
         backends.set(Backends::METAL, self.metal);
         backends.set(Backends::DX12, self.dx12);
-        backends.set(Backends::DX11, self.dx11);
         backends.set(Backends::BROWSER_WEBGPU, self.webgpu);
 
         backends

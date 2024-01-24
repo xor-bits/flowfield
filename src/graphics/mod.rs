@@ -41,7 +41,7 @@ pub struct Graphics {
     #[allow(unused)]
     limits: Limits,
 
-    last_flags: u32,
+    // last_flags: u32,
     size: (u32, u32),
 
     pub cursor: Vec2,
@@ -147,8 +147,8 @@ impl Graphics {
             .request_device(
                 &DeviceDescriptor {
                     label: None,
-                    features,
-                    limits: limits.clone(),
+                    required_features: features,
+                    required_limits: limits.clone(),
                 },
                 None,
             )
@@ -374,7 +374,7 @@ impl Graphics {
 
             limits,
 
-            last_flags: 0,
+            // last_flags: 0,
             size: (width, height),
 
             cursor: Vec2::new(-100.0, -100.0),
@@ -539,7 +539,7 @@ impl Graphics {
         );
         self.size = size;
 
-        let (width, height) = size;
+        // let (width, height) = size;
         /* self.draw_target = self.device.create_texture_with_data(
             &self.queue,
             &TextureDescriptor {
@@ -586,6 +586,7 @@ impl Graphics {
 
         let mut pass = encoder.begin_compute_pass(&ComputePassDescriptor {
             label: Some("shadow pass"),
+            timestamp_writes: None,
         });
 
         pass.set_pipeline(&self.shadow_pipeline);
@@ -600,6 +601,7 @@ impl Graphics {
 
         let mut pass = encoder.begin_compute_pass(&ComputePassDescriptor {
             label: Some("update pass"),
+            timestamp_writes: None,
         });
 
         pass.set_pipeline(&self.update_pipeline);
@@ -623,7 +625,7 @@ impl Graphics {
                 resolve_target: None,
                 /* ops: Operations {
                     load: LoadOp::Load, // no clear
-                    store: true,
+                    store: StoreOp::Store,
                 }, */
                 ops: Operations {
                     load: LoadOp::Clear(Color {
@@ -632,7 +634,7 @@ impl Graphics {
                         b: 0.0,
                         a: 0.0,
                     }),
-                    store: true,
+                    store: StoreOp::Store,
                 },
             })],
             ..<_>::default()

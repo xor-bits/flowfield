@@ -3,8 +3,9 @@ use std::{env, sync::Arc};
 use glam::Vec2;
 use winit::{
     dpi::LogicalSize,
-    event::{ElementState, Event, KeyboardInput, MouseScrollDelta, VirtualKeyCode, WindowEvent},
-    event_loop::EventLoopBuilder,
+    event::{ElementState, Event, KeyEvent, MouseScrollDelta, StartCause, WindowEvent},
+    event_loop::{ControlFlow, EventLoopBuilder},
+    keyboard::{KeyCode, PhysicalKey},
     platform::{wayland::EventLoopBuilderExtWayland, x11::EventLoopBuilderExtX11},
     window::WindowBuilder,
 };
@@ -48,12 +49,14 @@ async fn main() {
     // use winit::platform::{wayland::*, x11::*};
     let mut events = EventLoopBuilder::new();
     let events = if settings.window.force_wayland {
-        events.with_wayland().build()
+        events.with_wayland()
     } else if settings.window.force_x11 {
-        events.with_x11().build()
+        events.with_x11()
     } else {
-        events.build()
-    };
+        &mut events
+    }
+    .build()
+    .expect("failed to create the event loop");
 
     let window = WindowBuilder::new()
         .with_title(settings.window.title.as_ref())
@@ -66,7 +69,7 @@ async fn main() {
         ))) */
         .with_visible(false)
         .build(&events)
-        .expect("Failed to open a window");
+        .expect("failed to open a window");
 
     let window = Arc::new(window);
 
@@ -78,82 +81,98 @@ async fn main() {
 
     window.set_visible(true);
 
-    events.run(move |event, _events, control| {
-        control.set_poll();
+    events
+        .run(move |event, target| {
+            target.set_control_flow(ControlFlow::Poll);
 
-        match event {
-            Event::WindowEvent {
-                event: WindowEvent::CloseRequested,
-                ..
-            } => control.set_exit(),
-            Event::WindowEvent {
-                event:
-                    WindowEvent::KeyboardInput {
-                        input:
-                            KeyboardInput {
-                                state: ElementState::Pressed,
-                                virtual_keycode: Some(key),
-                                ..
-                            },
-                        ..
-                    },
-                ..
-            } => {
-                match key {
-                    VirtualKeyCode::F1 => settings.f ^= 1,
-                    VirtualKeyCode::F2 => settings.f ^= 1 << 1,
-                    VirtualKeyCode::F3 => settings.f ^= 1 << 2,
-                    VirtualKeyCode::F4 => settings.f ^= 1 << 3,
-                    VirtualKeyCode::F5 => settings.f ^= 1 << 4,
-                    VirtualKeyCode::F6 => settings.f ^= 1 << 5,
-                    VirtualKeyCode::F7 => settings.f ^= 1 << 6,
-                    VirtualKeyCode::F8 => settings.f ^= 1 << 7,
-                    VirtualKeyCode::F9 => settings.f ^= 1 << 8,
-                    VirtualKeyCode::F10 => settings.f ^= 1 << 9,
-                    VirtualKeyCode::F11 => settings.f ^= 1 << 10,
-                    VirtualKeyCode::F12 => settings.f ^= 1 << 11,
+            // println!("{event:?}");
 
-                    VirtualKeyCode::Escape => {
-                        control.set_exit();
-                    }
-                    _ => {}
-                };
+            match event {
+                Event::WindowEvent {
+                    event: WindowEvent::CloseRequested,
+                    ..
+                } => {
+                    target.exit();
+                }
+                Event::WindowEvent {
+                    event:
+                        WindowEvent::KeyboardInput {
+                            event:
+                                KeyEvent {
+                                    physical_key: PhysicalKey::Code(key),
+                                    state: ElementState::Pressed,
+                                    ..
+                                },
+                            // KeyboardInput {
+                            //     state: ElementState::Pressed,
+                            //     virtual_keycode: Some(key),
+                            //     ..
+                            // },
+                            ..
+                        },
+                    ..
+                } => {
+                    match key {
+                        KeyCode::F1 => settings.f ^= 1,
+                        KeyCode::F2 => settings.f ^= 1 << 1,
+                        KeyCode::F3 => settings.f ^= 1 << 2,
+                        KeyCode::F4 => settings.f ^= 1 << 3,
+                        KeyCode::F5 => settings.f ^= 1 << 4,
+                        KeyCode::F6 => settings.f ^= 1 << 5,
+                        KeyCode::F7 => settings.f ^= 1 << 6,
+                        KeyCode::F8 => settings.f ^= 1 << 7,
+                        KeyCode::F9 => settings.f ^= 1 << 8,
+                        KeyCode::F10 => settings.f ^= 1 << 9,
+                        KeyCode::F11 => settings.f ^= 1 << 10,
+                        KeyCode::F12 => settings.f ^= 1 << 11,
 
-                println!();
-                println!("Keys:");
-                println!("F1 = long exposure ({})", settings.f & (1) == 0);
-                println!("F2 = sub mode ({})", settings.f & (1 << 1) != 0);
-                println!("F3 = heavy points ({})", settings.f & (1 << 2) != 0);
-                println!("F4 = cursor main toggle ({})", settings.f & (1 << 3) == 0);
-                println!("F5 = heavy cursor ({})", settings.f & (1 << 4) != 0);
-                println!("F6 = noise main toggle ({})", settings.f & (1 << 5) != 0);
-                println!("F7 = heavy noise ({})", settings.f & (1 << 6) != 0);
-                println!("F8 = freeze noise ({})", settings.f & (1 << 7) != 0);
-            }
-            Event::WindowEvent {
-                event:
-                    WindowEvent::MouseWheel {
-                        delta: MouseScrollDelta::LineDelta(x, y),
-                        ..
-                    },
-                ..
-            } => {
-                graphics.scrolled((x, y));
-            }
-            Event::WindowEvent {
-                event: WindowEvent::Resized(s),
-                ..
-            } => {
-                graphics.resized((s.width, s.height));
-            }
-            Event::WindowEvent {
-                event: WindowEvent::CursorMoved { position, .. },
-                ..
-            } => {
-                graphics.cursor = Vec2::new(position.x as f32, position.y as f32);
-            }
-            Event::MainEventsCleared => graphics.frame(&settings),
-            _ => {}
-        };
-    });
+                        KeyCode::Escape => {
+                            target.exit();
+                        }
+                        _ => {}
+                    };
+
+                    println!();
+                    println!("Keys:");
+                    println!("F1 = long exposure ({})", settings.f & (1) == 0);
+                    println!("F2 = sub mode ({})", settings.f & (1 << 1) != 0);
+                    println!("F3 = heavy points ({})", settings.f & (1 << 2) != 0);
+                    println!("F4 = cursor main toggle ({})", settings.f & (1 << 3) == 0);
+                    println!("F5 = heavy cursor ({})", settings.f & (1 << 4) != 0);
+                    println!("F6 = noise main toggle ({})", settings.f & (1 << 5) != 0);
+                    println!("F7 = heavy noise ({})", settings.f & (1 << 6) != 0);
+                    println!("F8 = freeze noise ({})", settings.f & (1 << 7) != 0);
+                }
+                Event::WindowEvent {
+                    event:
+                        WindowEvent::MouseWheel {
+                            delta: MouseScrollDelta::LineDelta(x, y),
+                            ..
+                        },
+                    ..
+                } => {
+                    graphics.scrolled((x, y));
+                }
+                Event::WindowEvent {
+                    event: WindowEvent::Resized(s),
+                    ..
+                } => {
+                    graphics.resized((s.width, s.height));
+                }
+                Event::WindowEvent {
+                    event: WindowEvent::CursorMoved { position, .. },
+                    ..
+                } => {
+                    graphics.cursor = Vec2::new(position.x as f32, position.y as f32);
+                }
+
+                Event::NewEvents(StartCause::Poll)
+                | Event::WindowEvent {
+                    event: WindowEvent::RedrawRequested,
+                    ..
+                } => graphics.frame(&settings),
+                _ => {}
+            };
+        })
+        .unwrap();
 }

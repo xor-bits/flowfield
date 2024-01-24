@@ -17,9 +17,7 @@ use crate::settings::GraphicsSettings;
 pub struct SurfaceBuilder {
     instance: Arc<Instance>,
 
-    // in Rust, this one is dropped ...
-    pub surface: wgpu::Surface,
-    // always before this one
+    pub surface: wgpu::Surface<'static>,
     pub window: Arc<Window>,
 }
 
@@ -29,19 +27,14 @@ pub struct Surface {
     inner: SurfaceBuilder,
     vsync: bool,
     format: TextureFormat,
-
-    alpha_modes: Vec<CompositeAlphaMode>,
+    // alpha_modes: Vec<CompositeAlphaMode>,
 }
 
 //
 
 impl SurfaceBuilder {
     pub fn new(instance: Arc<Instance>, window: Arc<Window>) -> Result<Self> {
-        // SAFETY: safe as `window` is freed only after the surface is
-        // and the Arc makes sure the data the pointer points to is never moved
-        //
-        // look at the struct definition
-        let surface = unsafe { instance.create_surface(window.as_ref()) }?;
+        let surface = instance.create_surface(window.clone())?;
 
         Ok(SurfaceBuilder {
             instance,
@@ -53,8 +46,8 @@ impl SurfaceBuilder {
     pub fn build(self, settings: &GraphicsSettings, gpu: &Adapter, device: Arc<Device>) -> Surface {
         let SurfaceCapabilities {
             formats,
-            alpha_modes,
             ..
+            // alpha_modes,
             // present_modes,
         } = self.surface.get_capabilities(gpu);
 
@@ -66,8 +59,7 @@ impl SurfaceBuilder {
             inner: self,
             vsync: settings.vsync,
             format,
-
-            alpha_modes,
+            // alpha_modes,
         };
 
         surface.configure(None);
@@ -124,6 +116,7 @@ impl Surface {
                 present_mode,
                 alpha_mode,
                 view_formats,
+                desired_maximum_frame_latency: 2,
             },
         );
     }
